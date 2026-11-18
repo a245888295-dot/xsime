@@ -112,7 +112,7 @@ class KeycapButton: UIButton {
         setTitleColor(.white, for: .selected)
         setTitleColor(.label.withAlphaComponent(0.4), for: .disabled)
         setPreferredSymbolConfiguration(.init(pointSize: 17, weight: .medium), forImageIn: .normal)
-        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (button: KeycapButton, _: UITraitCollection) in button.updateAppearance() }
+        if #available(iOS 17.0, *) { registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (button: KeycapButton, _: UITraitCollection) in button.updateAppearance() } }
         updateAppearance()
     }
     required init?(coder: NSCoder) { fatalError() }
@@ -556,7 +556,7 @@ final class StatusLight: UIView {
         addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tapped)))
         isAccessibilityElement = true; accessibilityTraits = [.staticText, .updatesFrequently]
         accessibilityHint = L("轻点切换宠物与键盘配色", "Tap to change pet and keyboard colors")
-        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (light: StatusLight, _: UITraitCollection) in light.apply(animated: false) }
+        if #available(iOS 17.0, *) { registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (light: StatusLight, _: UITraitCollection) in light.apply(animated: false) } }
         apply(animated: false)
     }
     required init?(coder: NSCoder) { fatalError() }
