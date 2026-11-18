@@ -87,6 +87,7 @@ jobs:
         run: |
           set -o pipefail
           xcodebuild -project platforms/ios/RIMES.xcodeproj -scheme RIMES \
+            -configuration Release \
             -sdk iphoneos -destination 'generic/platform=iOS' \
             -derivedDataPath platforms/ios/build/DeviceDerivedData \
             CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO \
@@ -96,16 +97,21 @@ jobs:
         if: success()
         run: |
           set -euo pipefail
-          APP=platforms/ios/build/DeviceDerivedData/Build/Products/Debug-iphoneos/RIMES.app
+          APP=platforms/ios/build/DeviceDerivedData/Build/Products/Release-iphoneos/RIMES.app
           test -d "$APP"
           rm -rf dist && mkdir -p dist/Payload
           cp -R "$APP" dist/Payload/
           brew install ldid >/dev/null 2>&1 || true
           LDID=$(command -v ldid || echo /opt/homebrew/bin/ldid)
-          "$LDID" -Splatforms/ios/App/RIMES.entitlements dist/Payload/RIMES.app/RIMES || true
+          # 把 $(RIMES_KEYCHAIN_GROUP) 展开成实际值：ldid 不做变量替换，留着会写进无效的 group
+          sed 's/$(RIMES_KEYCHAIN_GROUP)/org.scholay.rimes.ios.shared/g' platforms/ios/App/RIMES.entitlements > /tmp/app.ent.plist
+          sed 's/$(RIMES_KEYCHAIN_GROUP)/org.scholay.rimes.ios.shared/g' platforms/ios/Keyboard/RIMESKeyboard.entitlements > /tmp/kb.ent.plist
+          "$LDID" -S/tmp/app.ent.plist dist/Payload/RIMES.app/RIMES || true
           if [ -f dist/Payload/RIMES.app/PlugIns/RIMESKeyboard.appex/RIMESKeyboard ]; then
-            "$LDID" -Splatforms/ios/Keyboard/RIMESKeyboard.entitlements dist/Payload/RIMES.app/PlugIns/RIMESKeyboard.appex/RIMESKeyboard || true
+            "$LDID" -S/tmp/kb.ent.plist dist/Payload/RIMES.app/PlugIns/RIMESKeyboard.appex/RIMESKeyboard || true
           fi
+          # 兜底：包里若还留着任何 dylib，也做 ad-hoc 签名，避免 TrollStore 校验时被拒
+          find dist/Payload -name '*.dylib' -print0 | while IFS= read -r -d '' f; do "$LDID" -S "$f" || true; done
           ( cd dist && zip -qry "XSIME-ios${{ inputs.ios_target }}-unsigned.ipa" Payload )
           ls -lh dist
           /usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' dist/Payload/RIMES.app/Info.plist || true
