@@ -6,6 +6,12 @@ import RimesCore
 import UniformTypeIdentifiers
 import Translation
 
+/// iOS 16 才有 `Locale.Language`；键盘扩展要跑在 iOS 15 上，这里只保留需要的标识字段。
+struct LanguageID: Hashable {
+    let minimalIdentifier: String
+    init(identifier: String) { minimalIdentifier = identifier }
+}
+
 final class KeyboardViewController: UIInputViewController {
     #if KEYBOARD_LAYOUT_TESTS
     var layoutProxy = LayoutTestDocumentProxy()
@@ -78,7 +84,7 @@ final class KeyboardViewController: UIInputViewController {
     private let appleTranslation = AppleTranslationPlugin()
     private let speaker = BlockSpeaker()
     private var selectedPlugin: KeyboardPlugin?
-    private var languages: [Locale.Language] = []
+    private var languages: [LanguageID] = []
     private let insertButton = InsertKeycapButton(), stopButton = KeycapButton()
     /// AI plugins never run on their own: Run is the only trigger.
     private let runButton = KeycapButton()
@@ -435,7 +441,7 @@ final class KeyboardViewController: UIInputViewController {
         if #available(iOS 26, *) {
             Task { [weak self] in
                 let languages = await LanguageAvailability().supportedLanguages
-                guard let self else { return }; self.languages = languages.sorted { $0.minimalIdentifier < $1.minimalIdentifier }; self.render()
+                guard let self else { return }; self.languages = languages.map { LanguageID(identifier: $0.minimalIdentifier) }.sorted { $0.minimalIdentifier < $1.minimalIdentifier }; self.render()
             }
         }
         surface.onTypingPress = { [weak self] in self?.noteTypingKey() }
@@ -2398,8 +2404,8 @@ final class KeyboardViewController: UIInputViewController {
         })
         return sections
     }
-    private var languageChoices: [Locale.Language] {
-        languages.isEmpty ? [Locale.Language(identifier: "zh-Hans"), Locale.Language(identifier: "en")] : languages
+    private var languageChoices: [LanguageID] {
+        languages.isEmpty ? [LanguageID(identifier: "zh-Hans"), LanguageID(identifier: "en")] : languages
     }
     private func configureLanguageRows() {
         speakRow.label.text = L("发送时朗读", "Read when sending")
