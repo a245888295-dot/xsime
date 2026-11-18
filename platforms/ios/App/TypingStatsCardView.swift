@@ -41,7 +41,7 @@ struct TypingStatsCardView: View {
                 Text(L("图片是可选的分享方式。只保存你主动导出的最新一张统计图片，不含输入正文。", "Images are an optional sharing format. Only the latest card you explicitly save is kept, without typed text.")).font(.footnote).foregroundStyle(.secondary)
             }.padding()
         }.navigationTitle(L("打字统计卡片", "Typing stats card"))
-        .task { reload() }.onChange(of: phase) { _, value in if value == .active { reload() } }
+        .task { reload() }.onChange(of: phase) { value in if value == .active { reload() } }
         .sheet(isPresented: $sharing) { if let png, let image = UIImage(data: png) { TypingCardShareSheet(image: image) } }
         .fileExporter(isPresented: $exporting, document: TypingCardDocument(png: png ?? Data()), contentType: .png, defaultFilename: "XSIME-typing-card") { result in
             switch result { case .success: message = L("图片已保存。", "Image saved."); case .failure(let error): message = error.localizedDescription }
