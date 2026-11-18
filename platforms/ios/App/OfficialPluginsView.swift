@@ -54,7 +54,8 @@ struct GalleryCard: View {
             }
             VStack(alignment: .leading, spacing: 3) {
                 Text(title).font(.headline).lineLimit(1)
-                Text(tagline).font(.caption).foregroundStyle(.secondary).lineLimit(2, reservesSpace: true)
+                // reservesSpace 是 iOS 16 才有的参数；iOS 15 只限行数，卡片高度可能差一行。
+                Text(tagline).font(.caption).foregroundStyle(.secondary).lineLimit(2)
             }
             HStack(spacing: 5) {
                 Circle().fill(status.tint).frame(width: 7, height: 7)
