@@ -1,0 +1,101 @@
+name: XSIME iOS unsigned IPA
+
+on:
+  workflow_dispatch:
+    inputs:
+      ios_target:
+        description: "iOS deployment target (e.g. 15.0 / 17.0)"
+        required: true
+        default: "15.0"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 170
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Rewrite deployment target
+        run: |
+          set -euo pipefail
+          python3 - "${{ inputs.ios_target }}" <<'PY'
+          import re, sys
+          target = sys.argv[1]
+          path = 'platforms/ios/project.yml'
+          s = open(path, encoding='utf-8').read()
+          before = s
+          s = re.sub(r"iOS: '[0-9.]+'", f"iOS: '{target}'", s)
+          s = re.sub(r"IPHONEOS_DEPLOYMENT_TARGET: '[0-9.]+'", f"IPHONEOS_DEPLOYMENT_TARGET: '{target}'", s)
+          if s == before:
+              raise SystemExit('deployment target patterns not found')
+          open(path, 'w', encoding='utf-8').write(s)
+          PY
+          grep -nE "iOS: '|IPHONEOS_DEPLOYMENT_TARGET" platforms/ios/project.yml
+
+      - name: Prepare official plugins
+        run: python3 scripts/prepare-official-plugins.py
+
+      - name: Bootstrap build inputs
+        run: python3 platforms/ios/scripts/bootstrap.py
+
+      - name: Build Rime engine
+        run: python3 platforms/ios/scripts/build-engine.py
+
+      - name: Prepare data and notices
+        run: |
+          python3 platforms/ios/scripts/prepare-data.py
+          python3 platforms/ios/scripts/write-notices.py
+
+      - name: Generate Xcode project
+        run: Vendor/ios-build/xcodegen/bin/xcodegen generate --spec platforms/ios/project.yml
+
+      - name: Build device app (unsigned)
+        run: |
+          set -o pipefail
+          xcodebuild -project platforms/ios/RIMES.xcodeproj -scheme RIMES \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath platforms/ios/build/DeviceDerivedData \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO \
+            build 2>&1 | tee /tmp/xcodebuild.log | tail -60
+
+      - name: Package IPA
+        if: success()
+        run: |
+          set -euo pipefail
+          APP=platforms/ios/build/DeviceDerivedData/Build/Products/Debug-iphoneos/RIMES.app
+          test -d "$APP"
+          rm -rf dist && mkdir -p dist/Payload
+          cp -R "$APP" dist/Payload/
+          brew install ldid >/dev/null 2>&1 || true
+          LDID=$(command -v ldid || echo /opt/homebrew/bin/ldid)
+          "$LDID" -Splatforms/ios/App/RIMES.entitlements dist/Payload/RIMES.app/RIMES || true
+          if [ -f dist/Payload/RIMES.app/PlugIns/RIMESKeyboard.appex/RIMESKeyboard ]; then
+            "$LDID" -Splatforms/ios/Keyboard/RIMESKeyboard.entitlements dist/Payload/RIMES.app/PlugIns/RIMESKeyboard.appex/RIMESKeyboard || true
+          fi
+          ( cd dist && zip -qry "XSIME-ios${{ inputs.ios_target }}-unsigned.ipa" Payload )
+          ls -lh dist
+          /usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' dist/Payload/RIMES.app/Info.plist || true
+
+      - name: Upload IPA
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: XSIME-ios${{ inputs.ios_target }}
+          path: dist/*.ipa
+          if-no-files-found: error
+
+      - name: Upload build log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log-ios${{ inputs.ios_target }}
+          path: /tmp/xcodebuild.log
+          if-no-files-found: warn
