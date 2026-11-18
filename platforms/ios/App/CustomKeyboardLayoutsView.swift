@@ -770,7 +770,7 @@ private struct CustomLayoutImportReview: View {
     @State private var selectedIndex = 0
 
     var body: some View {
-        NavigationStack {
+        NavigationView {
             List {
                 Section {
                     Text(result.title).font(.headline)
