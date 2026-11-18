@@ -255,8 +255,12 @@ enum CustomLayoutImportService {
         let letters = flat.filter { $0.action == .character }.map(\.text)
         let alphabet = "abcdefghijklmnopqrstuvwxyz".map(String.init)
         guard alphabet.allSatisfy({ letter in letters.filter { $0 == letter }.count == 1 }) else { return nil }
-        guard flat.count <= 80, let low = flat.map(\.width).min(), let high = flat.map(\.width).max(),
-              low > 0, high / low <= 8 else { throw invalid("键宽比例超出编辑器支持范围。") }
+        // 拆成几条语句：合并写法会让 Xcode 26 的类型检查超时（keypath map + min/max + 除法一起推导）。
+        guard flat.count <= 80 else { throw invalid("键位数量超出编辑器支持范围。") }
+        let widths = flat.map(\.width)
+        guard let low = widths.min(), let high = widths.max(), low > 0, high / low <= 8 else {
+            throw invalid("键宽比例超出编辑器支持范围。")
+        }
         let scale = min(10, 4 / high)
         guard low * scale >= 0.5 - 0.000001 else { throw invalid("最窄键超出编辑器支持范围。") }
         for rowIndex in rows.indices {
