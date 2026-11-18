@@ -53,7 +53,7 @@ struct HomeView: View {
                 }
                 Section(L("你的输入方式", "Your typing")) {
                     NavigationLink { InputHabitsView() } label: { Label(L("输入习惯", "Input preferences"), systemImage: "slider.horizontal.3") }
-                    Picker(L("默认方案", "Default scheme"), selection: $model.value.scheme) { ForEach(InputScheme.allCases.filter { $0 != .chord || chordPluginOn || model.value.scheme == .chord }) { Text($0.title).tag($0) } }.onChange(of: model.value.scheme) { _,_ in do { try RimeSchemeStore().activate(nil); model.value.schemeSelectionRevision = UUID(); model.save() } catch { model.error = error.localizedDescription } }
+                    Picker(L("默认方案", "Default scheme"), selection: $model.value.scheme) { ForEach(InputScheme.allCases.filter { $0 != .chord || chordPluginOn || model.value.scheme == .chord }) { Text($0.title).tag($0) } }.onChange(of: model.value.scheme) { _ in do { try RimeSchemeStore().activate(nil); model.value.schemeSelectionRevision = UUID(); model.save() } catch { model.error = error.localizedDescription } }
                     NavigationLink { ChordProfilesView() } label: { Label(L("滑动并击与键位", "Slide chords & mappings"), systemImage: "hand.draw") }
                     NavigationLink { KeyboardAppearanceView() } label: { Label(L("键盘布局与换肤", "Keyboard layout & skins"), systemImage: "keyboard") }
                     NavigationLink { RimeSchemesView() } label: { Label(L("Rime 方案包与导入", "Rime schemes & import"), systemImage: "shippingbox") }
@@ -165,7 +165,7 @@ struct ProviderEditor: View {
             Form {
                 Section {
                     TextField(L("名称", "Name"),text:$provider.name)
-                    TextField("https://api.example.com/v1",text:$provider.baseURL).keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled().onChange(of:provider.baseURL) { _,_ in consent = false }
+                    TextField("https://api.example.com/v1",text:$provider.baseURL).keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled().onChange(of:provider.baseURL) { _ in consent = false }
                     SecureField("API Key",text:$key).textInputAutocapitalization(.never).autocorrectionDisabled()
                     TextField("Model ID",text:$provider.model).textInputAutocapitalization(.never).autocorrectionDisabled()
                     Button(probing ? L("查询中…", "Loading…") : L("查询模型列表", "Fetch models")) {
