@@ -625,7 +625,7 @@ final class PanelChip: UIControl {
         label.textAlignment = .center; label.isUserInteractionEnabled = false
         icon.contentMode = .scaleAspectFit; icon.isUserInteractionEnabled = false
         addSubview(icon); addSubview(label); isAccessibilityElement = true
-        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (chip: PanelChip, _: UITraitCollection) in chip.apply() }
+        if #available(iOS 17.0, *) { registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (chip: PanelChip, _: UITraitCollection) in chip.apply() } }
         apply()
     }
     required init?(coder: NSCoder) { fatalError() }
@@ -779,7 +779,7 @@ final class DrumPicker: UIView, UIScrollViewDelegate {
         layer.addSublayer(fade)
         scroll.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tapped(_:))))
         isAccessibilityElement = true; accessibilityTraits = .adjustable
-        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (drum: DrumPicker, _: UITraitCollection) in drum.applyColors() }
+        if #available(iOS 17.0, *) { registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (drum: DrumPicker, _: UITraitCollection) in drum.applyColors() } }
         applyColors()
     }
     required init?(coder: NSCoder) { fatalError() }
@@ -973,8 +973,10 @@ final class PromptLabel: UILabel {
         layer.cornerRadius = 12; layer.cornerCurve = .continuous; layer.masksToBounds = true
         backgroundColor = UIColor.secondarySystemBackground.withAlphaComponent(0.96)
         textAlignment = .center; textColor = .label
-        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (label: PromptLabel, _: UITraitCollection) in
-            label.backgroundColor = UIColor.secondarySystemBackground.withAlphaComponent(0.96)
+        if #available(iOS 17.0, *) {
+            registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (label: PromptLabel, _: UITraitCollection) in
+                label.backgroundColor = UIColor.secondarySystemBackground.withAlphaComponent(0.96)
+            }
         }
     }
     required init?(coder: NSCoder) { fatalError() }
