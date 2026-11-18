@@ -127,7 +127,7 @@ final class SingleLineTextView: UIScrollView {
         hideEdgeEffects()
         layer.cornerRadius = 7; layer.cornerCurve = .continuous
         applyRole()
-        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: SingleLineTextView, _: UITraitCollection) in view.applyRole(); view.setNeedsLayout() }
+        if #available(iOS 17.0, *) { registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: SingleLineTextView, _: UITraitCollection) in view.applyRole(); view.setNeedsLayout() } }
     }
     required init?(coder: NSCoder) { fatalError() }
     override func tintColorDidChange() { super.tintColorDidChange(); applyRole(); setNeedsLayout() }
