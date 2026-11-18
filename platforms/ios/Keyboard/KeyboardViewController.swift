@@ -288,6 +288,7 @@ final class KeyboardViewController: UIInputViewController {
         var english: Bool
         var utilityCells: Bool
         var language: String?
+        var oneHanded = 0
     }
     private var menuState: MenuState?
     private struct SkinState: Equatable {
@@ -1464,6 +1465,17 @@ final class KeyboardViewController: UIInputViewController {
         updateHeight()
         view.setNeedsLayout()
     }
+    // MARK: 单手模式
+    /// 0 关闭，1 左手，2 右手。横屏不启用，宽度不足 280pt 时也不再压缩。
+    private var oneHandedMode: Int { min(2, max(0, preferences.oneHandedMode)) }
+    private func oneHandedWidth(_ full: CGFloat) -> CGFloat {
+        guard oneHandedMode > 0, full > 0, full <= 600 else { return full }
+        return max(280, (full * 0.78).rounded())
+    }
+    private func oneHandedOrigin(_ full: CGFloat) -> CGFloat {
+        guard oneHandedMode > 0, full > 0, full <= 600 else { return 0 }
+        return oneHandedMode == 1 ? 0 : full - oneHandedWidth(full)
+    }
     private func contentHeight(width: CGFloat) -> CGFloat {
         let rows = layoutRows(width: width)
         return rows.reduce(CGFloat(10)) { $0 + $1.1 } + CGFloat(max(0, rows.count - 1)) * 4 - (compactTypingKeys ? 3 : 0)
@@ -1475,7 +1487,7 @@ final class KeyboardViewController: UIInputViewController {
         let width = [view.bounds.width, view.superview?.bounds.width ?? 0,
                      view.window?.windowScene?.screen.bounds.width ?? UIScreen.main.bounds.width]
             .first { $0.isFinite && $0 > 0 } ?? 320
-        let desired = contentHeight(width: width) + heightNudge
+        let desired = contentHeight(width: oneHandedWidth(width)) + heightNudge
         if height.constant != desired {
             height.constant = desired
             view.invalidateIntrinsicContentSize()
@@ -1518,7 +1530,10 @@ final class KeyboardViewController: UIInputViewController {
     }
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        let rows = layoutRows(width: view.bounds.width)
+        let fullWidth = view.bounds.width
+        let contentWidth = oneHandedWidth(fullWidth)
+        let originX = oneHandedOrigin(fullWidth)
+        let rows = layoutRows(width: contentWidth)
         // Apple's standard keys end about 2 pt lower than a flat 5 pt inset puts ours (3x measurements).
         var y = view.bounds.height - (surface.usesStandardLayout ? 3 : 5)
         // Measured from Apple's portrait keyboard: keys sit 6.5 pt from each side.
@@ -1526,13 +1541,13 @@ final class KeyboardViewController: UIInputViewController {
         let keyMargin: CGFloat = view.bounds.width > 600 ? 5 : (6.5 * scale).rounded(.up) / scale
         for (item, rowHeight) in rows.reversed() {
             let margin = item === surface ? keyMargin : 5
-            y -= rowHeight; item.frame = CGRect(x: margin, y: y, width: max(0, view.bounds.width - 2 * margin), height: rowHeight); y -= item === bottom && compactTypingKeys ? 1 : 4
+            y -= rowHeight; item.frame = CGRect(x: originX + margin, y: y, width: max(0, contentWidth - 2 * margin), height: rowHeight); y -= item === bottom && compactTypingKeys ? 1 : 4
         }
         // The prompt floats over the middle of the keys; it owns no row.
-        let promptWidth = view.bounds.width - 40
+        let promptWidth = contentWidth - 40
         let promptSize = status.sizeThatFits(CGSize(width: promptWidth, height: .greatestFiniteMagnitude))
         let width = min(promptSize.width, promptWidth)
-        status.frame = CGRect(x: (view.bounds.width - width) / 2, y: surface.frame.midY - promptSize.height / 2, width: width, height: promptSize.height)
+        status.frame = CGRect(x: originX + (contentWidth - width) / 2, y: surface.frame.midY - promptSize.height / 2, width: width, height: promptSize.height)
         let landscape = view.bounds.width > 600
         if bufferEnabled {
             let bufferRowHeight: CGFloat = landscape ? 28 : 36
@@ -1771,7 +1786,8 @@ final class KeyboardViewController: UIInputViewController {
             sounds: preferences.keySounds, traditional: preferences.traditional, theme: preferences.resolvedTheme,
             layout: preferences.ordinaryLayout, customLayout: customLayoutSnapshot != nil,
             directSwipeSymbols: preferences.directSwipeSymbols, swipeSymbols: preferences.longPressSwipeSymbols, english: directEnglish,
-            utilityCells: surface.hasUtilityCells, language: Locale.preferredLanguages.first)
+            utilityCells: surface.hasUtilityCells, language: Locale.preferredLanguages.first,
+            oneHanded: preferences.oneHandedMode)
         guard state != menuState else { return }
         menuState = state
         let levels: [(String, HapticStrength?)] = [(L("关闭", "Off"), nil), (L("轻", "Light"), .light), (L("强", "Strong"), .strong), (L("更强", "Stronger"), .strongest)]
@@ -1853,6 +1869,17 @@ final class KeyboardViewController: UIInputViewController {
             items.append(UIAction(title: L("表情", "Emoji"), image: UIImage(systemName: "face.smiling")) { [weak self] _ in self?.surface.showEmoji() })
         }
         items.append(UIAction(title: L("本地剪贴板", "Local clipboard"), image: UIImage(systemName: "doc.on.clipboard")) { [weak self] _ in self?.openClipboard() })
+        items.append(UIMenu(title: L("单手模式", "One-handed"), image: UIImage(systemName: "rectangle.split.2x1"), children: [
+            (L("关闭", "Off"), 0), (L("左手", "Left hand"), 1), (L("右手", "Right hand"), 2)
+        ].map { title, mode in
+            UIAction(title: title, state: oneHandedMode == mode ? .on : .off) { [weak self] _ in
+                guard let self else { return }
+                self.preferences.oneHandedMode = mode
+                self.preferencesStore.save(self.preferences)
+                self.refreshMoreMenu()
+                self.resize()
+            }
+        }))
         items.append(haptics)
         moreButton.menu = UIMenu(children: items)
     }
