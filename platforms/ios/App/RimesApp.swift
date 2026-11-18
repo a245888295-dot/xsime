@@ -258,7 +258,7 @@ struct PoemPatternEditor: View {
         NavigationView {
             Form {
                 TextField(L("名称，如“七绝”", "Name, e.g. “Quatrain”"), text: $pattern.name)
-                TextField(L("格式要求", "Form description"), text: $pattern.instruction, axis: .vertical).lineLimit(3...6)
+                AdaptiveTextField(placeholder: L("格式要求", "Form description"), text: $pattern.instruction, minLines: 3, maxLines: 6)
                 Picker(L("即兴时的句数", "Lines when improvising"), selection: $pattern.lines) {
                     Text(L("不固定", "Any")).tag(Int?.none)
                     ForEach([2, 4, 6, 8, 12], id: \.self) { Text("\($0)").tag(Int?.some($0)) }
@@ -286,7 +286,7 @@ struct PoemCardEditor: View {
         NavigationView {
             Form {
                 TextField(L("名称，如“春日”", "Name, e.g. “Spring”"), text: $card.name)
-                Section { TextField(L("词语，用空格或逗号分隔", "Words, separated by spaces or commas"), text: $words, axis: .vertical).lineLimit(3...8) } footer: { Text(L("例如：杏花 细雨 燕归 东风", "For example: blossom drizzle swallow breeze")) }
+                Section { AdaptiveTextField(placeholder: L("词语，用空格或逗号分隔", "Words, separated by spaces or commas"), text: $words, minLines: 3, maxLines: 8) } footer: { Text(L("例如：杏花 细雨 燕归 东风", "For example: blossom drizzle swallow breeze")) }
                 if !message.isEmpty { Text(message).foregroundStyle(.red) }
             }.navigationTitle(L("词卡", "Word card"))
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button(L("取消", "Cancel")) { dismiss() } }; ToolbarItem(placement: .confirmationAction) { Button(L("保存", "Save")) { save() } } }
