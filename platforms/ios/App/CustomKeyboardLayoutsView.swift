@@ -555,6 +555,9 @@ private struct CustomLayoutKeyboardPreview: UIViewRepresentable {
     func updateUIView(_ view: CustomLayoutPreviewUIView, context: Context) {
         view.configure(layout: layout, selectedID: selectedID, onSelect: onSelect, onDrop: onDrop)
     }
+    // ProposedViewSize 与 UIViewRepresentable.sizeThatFits 都是 iOS 16 才加入的；
+    // iOS 15 上 SwiftUI 不调用这个方法，尺寸改由下面 UIView 的 intrinsicContentSize 提供。
+    @available(iOS 16.0, *)
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: CustomLayoutPreviewUIView, context: Context) -> CGSize? {
         let width = max(1, proposal.width ?? 393)
         return CGSize(width: width, height: layout.geometry(width: Double(width), landscape: width > 590).height)
@@ -622,12 +625,20 @@ private final class CustomLayoutPreviewUIView: UIView, UIDropInteractionDelegate
         invalidateIntrinsicContentSize()
         setNeedsLayout()
     }
+    /// 已经量到的宽度；iOS 15 上靠它给 SwiftUI 报高度（那边没有 sizeThatFits）。
+    private var measuredWidth: CGFloat = 0
+
     override var intrinsicContentSize: CGSize {
-        CGSize(width: UIView.noIntrinsicMetric,
-               height: layout?.geometry(width: Double(max(1, bounds.width)), landscape: bounds.width > 590).height ?? 1)
+        let width = bounds.width > 1 ? bounds.width : (measuredWidth > 1 ? measuredWidth : 393)
+        return CGSize(width: UIView.noIntrinsicMetric,
+                      height: layout?.geometry(width: Double(width), landscape: width > 590).height ?? 1)
     }
     override func layoutSubviews() {
         super.layoutSubviews()
+        if bounds.width > 1, abs(bounds.width - measuredWidth) > 0.5 {
+            measuredWidth = bounds.width
+            invalidateIntrinsicContentSize()
+        }
         guard let layout else { return }
         frames = layout.geometry(width: Double(bounds.width), landscape: bounds.width > 590).frames
         for frame in frames {
