@@ -35,7 +35,12 @@ struct TypingStatsCardView: View {
                     Text(L("图片内的地址用于展示；需要可点击的链接时，请单独复制地址。", "The address in the image is visual. Copy the link separately for a clickable URL.")).font(.footnote).foregroundStyle(.secondary)
                     Button(role: .destructive) { do { try store.remove(); self.png = nil; message = "" } catch { message = error.localizedDescription } } label: { Label(L("删除这张卡片", "Delete this card"), systemImage: "trash") }
                 } else {
-                    ContentUnavailableView(L("还没有统计卡片", "No stats card yet"), systemImage: "square.grid.3x3", description: Text(L("在默认 Buffer 中打几个字，点击统计状态框，切换到“图片”，再选“保存到 App”。", "Type a little in Default Buffer, tap the stats readout, select Image, then choose Save to app.")))
+                    VStack(spacing: 10) {
+                        Image(systemName: "square.grid.3x3").font(.system(size: 36)).foregroundStyle(.secondary)
+                        Text(L("还没有统计卡片", "No stats card yet")).font(.headline)
+                        Text(L("在默认 Buffer 中打几个字，点击统计状态框，切换到“图片”，再选“保存到 App”。", "Type a little in Default Buffer, tap the stats readout, select Image, then choose Save to app."))
+                            .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                    }.frame(maxWidth: .infinity).padding(.vertical, 24)
                 }
                 if !message.isEmpty { Text(message).font(.callout).accessibilityIdentifier("typingCard.message") }
                 Text(L("图片是可选的分享方式。只保存你主动导出的最新一张统计图片，不含输入正文。", "Images are an optional sharing format. Only the latest card you explicitly save is kept, without typed text.")).font(.footnote).foregroundStyle(.secondary)
