@@ -102,6 +102,13 @@ final class KeyboardViewController: UIInputViewController {
     private var clipboardStore = TextClipboardStore()
     private let clipboardView = TextClipboardPanel()
     private var clipboardEntries: [TextClipboardStore.Entry] = []
+    /// 工具面板：剪贴板、常用语、单手模式等一格一格排开。
+    private let toolsPanel = KeyboardToolsPanel()
+    private var toolsOpen = false
+    private let toolsButton = KeycapButton(), clipboardButton = KeycapButton()
+    private var phrases: [String] = []
+    /// 正在拆的剪贴板条目；不为 nil 时设置面板显示它的分段。
+    private var splitEntry: TextClipboardStore.Entry?
     private struct ClipboardPresentation {
         let id = UUID(), target: UUID, revision: UUID
         let plugin: KeyboardPlugin?
@@ -363,7 +370,10 @@ final class KeyboardViewController: UIInputViewController {
         inputView?.allowsSelfSizing = true
         height = view.heightAnchor.constraint(equalToConstant: 0)
         height.identifier = "RIMES.keyboard.contentHeight"
-        for item in [bufferPanel, candidatePanel, spellingStrip, surface, bottom, status, panel] { view.addSubview(item) }
+        for item in [bufferPanel, candidatePanel, spellingStrip, surface, bottom, status, panel, toolsPanel] { view.addSubview(item) }
+        toolsPanel.isHidden = true
+        toolsPanel.onClose = { [weak self] in self?.closeTools() }
+        toolsPanel.onSelect = { [weak self] id in self?.chooseTool(id) }
         spellingStrip.isHidden = true
         spellingStrip.onSelect = { [weak self] spelling in self?.selectNineKeySpelling(spelling) }
         panel.isHidden = true
@@ -398,6 +408,15 @@ final class KeyboardViewController: UIInputViewController {
         configure(aiButton, "") {}; aiButton.showsMenuAsPrimaryAction = true
         configure(moreButton, "") {}; moreButton.symbol("gearshape", label: L("键盘设置", "Keyboard settings")); moreButton.showsMenuAsPrimaryAction = true
         moreButton.addAction(UIAction { [weak self] _ in self?.surface.cancel(); self?.insertButton.cancelPress(); self?.cancelDeletes() }, for: .touchDown)
+        configure(toolsButton, "") { [weak self] in self?.toggleTools() }
+        toolsButton.symbol("square.grid.2x2", label: L("工具", "Tools"))
+        toolsButton.accessibilityHint = L("剪贴板、常用语、单手模式等", "Clipboard, phrases, one-handed mode and more")
+        configure(clipboardButton, "") { [weak self] in self?.openClipboard(tab: .clipboard) }
+        clipboardButton.symbol("scissors", label: L("剪贴板", "Clipboard"))
+        for button in [toolsButton, clipboardButton] {
+            button.addAction(UIAction { [weak self] _ in self?.surface.feedback.send(.press) }, for: .touchDown)
+            candidatePanel.addSubview(button)
+        }
         insertButton.symbol("paperplane", label: L("插入下一块", "Insert next block"))
         insertButton.accessibilityHint = L("单击逐块上屏，长按一秒插入全部", "Tap for the next block; hold one second to insert all")
         insertButton.addAction(UIAction { [weak self] _ in self?.surface.feedback.send(.press) }, for: .touchDown)
@@ -579,7 +598,7 @@ final class KeyboardViewController: UIInputViewController {
             button.accessibilityIdentifier = "keyboard.nineKey.\(id)"
         }
         status.font = .systemFont(ofSize: 13); status.numberOfLines = 3
-        for (item, id) in [(bufferButton, "buffer"), (aiButton, "plugin"), (runButton, "plugin.run"), (settingsButton, "buffer.settings"), (insertButton, "insert"), (stopButton, "stop"), (moreButton, "more"), (globe, "globe"), (spaceKey, "space"), (shiftButton, "shift"), (deleteButton, "delete"), (chordDelete, "delete.chord"), (bottomLanguage, "mode.bottom"), (enter, "enter")] {
+        for (item, id) in [(bufferButton, "buffer"), (aiButton, "plugin"), (runButton, "plugin.run"), (settingsButton, "buffer.settings"), (insertButton, "insert"), (stopButton, "stop"), (moreButton, "more"), (toolsButton, "tools"), (clipboardButton, "clipboard"), (globe, "globe"), (spaceKey, "space"), (shiftButton, "shift"), (deleteButton, "delete"), (chordDelete, "delete.chord"), (bottomLanguage, "mode.bottom"), (enter, "enter")] {
             item.accessibilityIdentifier = "keyboard.\(id)"
         }
         NotificationCenter.default.addObserver(self, selector: #selector(hostResigned), name: .NSExtensionHostWillResignActive, object: nil)
@@ -729,7 +748,7 @@ final class KeyboardViewController: UIInputViewController {
         returnKey.cancelTracking(with: nil); pressedReturn = nil
         cancelDeletes(); shiftState = .off; punctuationOpen = false
         metrics.sampleMemory(); metrics.save()
-        consentThisSession.removeAll(); speaker.stop(); session.reset(); statsTimer?.invalidate(); statsTimer = nil; surface.retire(); cancelRequest(); engine.suspend(); snapshot = .init(); buffer = .init(); bufferEnabled = false; selectedPlugin = nil; panelOpen = false; status.text = ""; refreshPluginMenu(); render()
+        consentThisSession.removeAll(); speaker.stop(); session.reset(); statsTimer?.invalidate(); statsTimer = nil; surface.retire(); cancelRequest(); engine.suspend(); snapshot = .init(); buffer = .init(); bufferEnabled = false; selectedPlugin = nil; panelOpen = false; toolsOpen = false; splitEntry = nil; status.text = ""; refreshPluginMenu(); render()
     }
     override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) { cancelDeletes(); insertButton.cancelPress(); surface.retire(); super.viewWillTransition(to: size, with: coordinator); coordinator.animate(alongsideTransition: { _ in self.resize() }) }
     override func textDidChange(_ textInput: UITextInput?) {
@@ -1216,7 +1235,7 @@ final class KeyboardViewController: UIInputViewController {
         candidateStrip.update(punctuationOpen ? PunctuationLayout.strip : showingAssociations ? associations : snapshot.candidates,
                               comments: punctuationOpen || showingAssociations || usesNineKey ? [] : engine.candidateReadings,
                               context: punctuationOpen ? "punctuation" : showingAssociations ? "associations" : "composition:\(snapshot.preedit)")
-        renderHandPreview(); renderShortcuts(); refreshLanguageSwap(); refreshKeyboardSkin(); renderBuffer(); resize()
+        renderHandPreview(); renderShortcuts(); refreshLanguageSwap(); refreshKeyboardSkin(); renderBuffer(); renderTools(); resize()
     }
     private func syncCustomLayout() {
         guard !syncingCustomLayout else { return }
@@ -1333,9 +1352,8 @@ final class KeyboardViewController: UIInputViewController {
     private func renderShortcuts() {
         let empty = snapshot.preedit.isEmpty && snapshot.candidates.isEmpty && !showingAssociations && !punctuationOpen && !surface.isChordActive && handPreview.isHidden
         let choosing = handPreview.isHidden && !showingAssociations && (!snapshot.preedit.isEmpty || !snapshot.candidates.isEmpty)
-        if moreButton.isHidden != choosing { moreButton.isHidden = choosing }
-        if bufferButton.isHidden != choosing { bufferButton.isHidden = choosing }
-        candidateStrip.controlInsets = .init(top: 0, left: choosing ? 0 : 36, bottom: 0, right: choosing ? 0 : 36)
+        for button in [moreButton, toolsButton, clipboardButton, bufferButton] where button.isHidden != choosing { button.isHidden = choosing }
+        candidateStrip.controlInsets = .init(top: 0, left: choosing ? 0 : 72, bottom: 0, right: choosing ? 0 : 72)
         // The empty strip stays in place underneath, so the row keeps its reserved slot.
         shortcuts.isHidden = !empty
         shortcuts.selected = bufferEnabled ? selectedPlugin : nil
@@ -1573,17 +1591,20 @@ final class KeyboardViewController: UIInputViewController {
             holdBar.tintColor = preferences.resolvedTheme.palette.accent; bufferPanel.bringSubviewToFront(holdBar)
             result.font = .systemFont(ofSize: landscape ? 14 : 15)
         }
+        toolsButton.frame = CGRect(x: 0, y: 0, width: 32, height: 32)
+        moreButton.frame = CGRect(x: 36, y: 0, width: 32, height: 32)
+        clipboardButton.frame = CGRect(x: candidatePanel.bounds.width - 68, y: 0, width: 32, height: 32)
         bufferButton.frame = CGRect(x: candidatePanel.bounds.width - 32, y: 0, width: 32, height: 32)
         candidateStrip.frame = candidatePanel.bounds
         (candidatePanel as? CandidatePanelView)?.expandReachWidth = candidateStrip.expandReachWidth
-        moreButton.frame = CGRect(x: 0, y: 0, width: 32, height: 32)
-        handPreview.frame = CGRect(x: 36, y: 0, width: max(0, candidatePanel.bounds.width - 72), height: 32)
+        handPreview.frame = CGRect(x: 72, y: 0, width: max(0, candidatePanel.bounds.width - 144), height: 32)
         shortcuts.frame = handPreview.frame
         handPreview.landscape = landscape
         bottom.layoutIfNeeded()
         insertButton.frame = insertionSlot.bounds; stopButton.frame = insertionSlot.bounds
         // Settings cover the keys only, so the Buffer lines stay visible while choosing.
         panel.frame = (bottom.isHidden ? surface.frame : surface.frame.union(bottom.frame)).insetBy(dx: -5, dy: 0)
+        toolsPanel.frame = panel.frame
         metrics.laidOut(width: view.bounds.width, height: view.bounds.height, requestedHeight: height.constant,
             containerHeight: Double(view.superview?.bounds.height ?? 0), topInset: Double(rows.first?.0.frame.minY ?? 0))
     }
@@ -2248,9 +2269,12 @@ final class KeyboardViewController: UIInputViewController {
         return onscreen && bufferEnabled && currentDocument == current.target
             && DocumentIdentity.read(textDocumentProxy) == current.target && selectedPlugin == current.plugin
     }
-    private func openClipboard() {
+    private func openClipboard(tab: TextClipboardTab = .clipboard) {
         guard onscreen, clipboardPresentation == nil, !hasComposition, pendingPaste == nil, hostImportTask == nil,
               let target = currentDocument, DocumentIdentity.read(textDocumentProxy) == target else { return }
+        toolsOpen = false; splitEntry = nil
+        phrases = KeyboardPhrases.load()
+        clipboardView.select(tab: tab)
         dismissAIConsent(); surface.cancel(); cancelDeletes(); insertButton.cancelPress(); cancelRequest()
         let presentation = ClipboardPresentation(target: target, revision: buffer.sourceRevision, plugin: selectedPlugin,
             wasAutoSuspended: autoSuspended, fullAccess: canReadClipboard, autoDelay: defaultDelay)
@@ -2269,6 +2293,15 @@ final class KeyboardViewController: UIInputViewController {
         clipboardView.onSelect = { [weak self] id in self?.selectClipboard(id, presentation: presentation.id) }
         clipboardView.onDelete = { [weak self] id in self?.deleteClipboard(id, presentation: presentation.id) }
         clipboardView.onClear = { [weak self] in self?.clearClipboard(presentation: presentation.id) }
+        clipboardView.onSplit = { [weak self] id in self?.openSplit(id, presentation: presentation.id) }
+        clipboardView.onAddPhrase = { [weak self] id in self?.addPhrase(from: id, presentation: presentation.id) }
+        clipboardView.onPhraseSelect = { [weak self] text in self?.insertPhrase(text) }
+        clipboardView.onPhraseDelete = { [weak self] text in
+            KeyboardPhrases.remove(text); self?.phrases = KeyboardPhrases.load(); self?.render()
+        }
+        clipboardView.onPhraseClear = { [weak self] in
+            KeyboardPhrases.clear(); self?.phrases = []; self?.render()
+        }
         panelOpen = true; render()
     }
     private func closeClipboard(restoringAuto: Bool = false) {
@@ -2280,7 +2313,7 @@ final class KeyboardViewController: UIInputViewController {
             stopDefaultAutoSend(); autoSuspended = current.wasAutoSuspended
             autoAwaitingOrdinaryEdit = true
         }
-        clipboardPresentation = nil; clipboardEntries = []; clipboardMessage = ""; clipboardView.redact()
+        clipboardPresentation = nil; clipboardEntries = []; clipboardMessage = ""; splitEntry = nil; clipboardView.redact()
         if pendingPaste?.collectOnly == true { pendingPaste = nil }
     }
     private func selectClipboard(_ id: UUID, presentation: UUID) {
@@ -2306,6 +2339,96 @@ final class KeyboardViewController: UIInputViewController {
         catch { clipboardMessage = L("清空未完成，请重试", "Could not clear; try again") }
         render()
     }
+    // MARK: 工具面板
+    private func toggleTools() {
+        guard onscreen else { return }
+        surface.cancel(); insertButton.cancelPress(); cancelDeletes()
+        if toolsOpen { closeTools(); return }
+        closeClipboard(restoringAuto: true); splitEntry = nil; panelOpen = false
+        toolsOpen = true; render()
+    }
+    private func closeTools() { toolsOpen = false; render() }
+    private func renderTools() {
+        toolsPanel.isHidden = !toolsOpen
+        guard toolsOpen else { return }
+        view.bringSubviewToFront(toolsPanel)
+        refreshTools()
+    }
+    private func refreshTools() {
+        let hand = oneHandedMode
+        let handDetail = hand == 0 ? L("关", "Off") : hand == 1 ? L("左手", "Left") : L("右手", "Right")
+        toolsPanel.show(title: L("工具", "Tools"), tiles: [
+            ToolTile(id: "clipboard", title: L("剪贴板", "Clipboard"), symbol: "doc.on.clipboard"),
+            ToolTile(id: "phrases", title: L("常用语", "Phrases"), symbol: "text.quote"),
+            ToolTile(id: "onehand", title: L("单手模式", "One-handed"), symbol: "hand.point.up.left", detail: handDetail, selected: hand > 0),
+            ToolTile(id: "traditional", title: L("繁体输出", "Traditional"), symbol: "character.book.closed", detail: preferences.traditional ? L("开", "On") : L("关", "Off"), selected: preferences.traditional),
+            ToolTile(id: "emoji", title: L("表情", "Emoji"), symbol: "face.smiling"),
+            ToolTile(id: "settings", title: L("键盘设置", "Settings"), symbol: "slider.horizontal.3"),
+        ])
+    }
+    private func chooseTool(_ id: String) {
+        switch id {
+        case "clipboard": openClipboard(tab: .clipboard)
+        case "phrases": openClipboard(tab: .phrases)
+        case "onehand":
+            preferences.oneHandedMode = (oneHandedMode + 1) % 3
+            preferencesStore.save(preferences)
+            surface.feedback.send(.press)
+            refreshTools(); resize()
+        case "traditional":
+            toolsOpen = false; toggleScript()
+        case "emoji":
+            toolsOpen = false; surface.showEmoji(); render()
+        case "settings":
+            toolsOpen = false; openSettings(for: selectedPlugin)
+        default: break
+        }
+    }
+    private func openSplit(_ id: UUID, presentation: UUID) {
+        guard isCurrentClipboard(presentation), pendingPaste == nil,
+              let entry = clipboardEntries.first(where: { $0.id == id }) else { return }
+        guard Self.splitPieces(entry.text).count > 1 else {
+            clipboardMessage = L("这段文字已经很短，不需要拆", "Already short; nothing to split")
+            render(); return
+        }
+        surface.feedback.send(.press)
+        splitEntry = entry
+        render()
+    }
+    private func addPhrase(from id: UUID, presentation: UUID) {
+        guard isCurrentClipboard(presentation), let entry = clipboardEntries.first(where: { $0.id == id }) else { return }
+        KeyboardPhrases.add(entry.text)
+        phrases = KeyboardPhrases.load()
+        clipboardMessage = L("已存为常用语", "Saved to phrases")
+        render()
+    }
+    private func insertPhrase(_ text: String) { insertPiece(text) }
+    private func insertPiece(_ text: String) {
+        guard buffer.source.utf8.count + text.utf8.count <= 16 * 1024 else {
+            clipboardMessage = L("Buffer 已满，请先插入或清空", "Buffer is full. Insert or clear it first."); render(); return
+        }
+        cancelRequest(); stopDefaultAutoSend(); autoSuspended = true
+        buffer.insert(text); buffer.invalidateResult()
+        splitEntry = nil
+        closeClipboard(); panelOpen = false
+        status.text = L("已加入 Buffer，确认后再上屏", "Added to Buffer. Insert when ready."); render()
+    }
+    private static func splitPieces(_ text: String) -> [String] {
+        // 先按句子/分句边界拆（引擎里的同一个分段器），再兜底成不超过 24 字的片段，
+        // 这样每一段都能在一颗词块里完整读到。
+        var pieces: [String] = []
+        for segment in DefaultBlockSegmenter.segments(from: text) {
+            let trimmed = segment.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            var current = ""
+            for character in trimmed {
+                current.append(character)
+                if current.count >= 24 { pieces.append(current); current = "" }
+            }
+            if !current.isEmpty { pieces.append(current) }
+        }
+        return pieces
+    }
     @objc private func bufferHeld(_ recognizer: UILongPressGestureRecognizer) {
         guard recognizer.state == .began else { return }
         surface.feedback.send(.press); openSettings(for: selectedPlugin)
@@ -2320,7 +2443,7 @@ final class KeyboardViewController: UIInputViewController {
         if plugin != selectedPlugin { selectPlugin(plugin) }
         panelOpen = true; render()
     }
-    private func closePanel() { closeClipboard(restoringAuto: true); dismissAIConsent(); panelOpen = false; render() }
+    private func closePanel() { closeClipboard(restoringAuto: true); dismissAIConsent(); panelOpen = false; toolsOpen = false; splitEntry = nil; render() }
     private func renderPanel() {
         panel.isHidden = !panelOpen
         guard panelOpen else { return }
@@ -2328,12 +2451,28 @@ final class KeyboardViewController: UIInputViewController {
         if let clipboard = clipboardPresentation {
             guard isCurrentClipboard(clipboard.id) else { closeClipboard(); panelOpen = false; panel.isHidden = true; return }
             if canReadClipboard != clipboard.fullAccess { clipboardPresentation?.mayResumeAuto = false }
-            clipboardView.update(clipboardEntries, fullAccess: canReadClipboard, enabled: pendingPaste == nil)
+            if let entry = splitEntry {
+                let pieces = Self.splitPieces(entry.text)
+                panel.show(title: L("拆词", "Split text"), sections: [
+                    PanelSection(title: L("点一段加入 Buffer", "Tap a piece"),
+                                 note: L("把长文字拆成短句，按需要分几次插入。", "Long text becomes short pieces you insert one at a time."),
+                                 items: pieces.enumerated().map { PanelItem(id: "\($0.offset)", title: $0.element, role: .action) },
+                                 customKey: entry.id.uuidString + pieces.joined()) { [weak self] id in
+                        guard let self, let index = Int(id), pieces.indices.contains(index) else { return }
+                        self.insertPiece(pieces[index])
+                    },
+                    PanelSection(title: "", items: [PanelItem(id: "back", title: L("返回剪贴板", "Back to clipboard"), symbol: "chevron.left", role: .action)]) { [weak self] _ in
+                        self?.splitEntry = nil; self?.render()
+                    }
+                ])
+                return
+            }
+            clipboardView.update(clipboardEntries, phrases: phrases, fullAccess: canReadClipboard, enabled: pendingPaste == nil)
             panel.show(title: L("本地剪贴板", "Local clipboard"), sections: [
                 PanelSection(title: L("文字历史", "Text history"),
                     note: clipboardMessage.isEmpty ? L("仅显式收录；最多 40 条。点条目加入 Buffer，不会自动上屏或联网。", "Explicit collection only, up to 40 entries. Tap an entry to add to Buffer without automatic insertion or networking.") : clipboardMessage,
-                    custom: clipboardView, customHeight: max(110, min(220, panel.bounds.height - 92)),
-                    customKey: clipboard.id.uuidString + clipboardEntries.map { $0.id.uuidString }.joined() + "\(pendingPaste != nil)|\(canReadClipboard)")
+                    custom: clipboardView, customHeight: max(160, min(250, panel.bounds.height - 92)),
+                    customKey: clipboard.id.uuidString + clipboardEntries.map { $0.id.uuidString }.joined() + phrases.joined() + "\(pendingPaste != nil)|\(canReadClipboard)")
             ])
             return
         }
