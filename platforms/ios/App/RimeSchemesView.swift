@@ -193,12 +193,12 @@ private struct RimeSchemeImportReviewView: View {
     @State private var selectedIDs = Set<String>()
 
     var body: some View {
-        NavigationStack {
+        NavigationView {
             List {
                 Section {
                     Text(review.sourceName).font(.headline)
-                    LabeledContent("文件数量", value: "\(review.fileCount) 项")
-                    LabeledContent("解压后大小", value: ByteCountFormatter.string(fromByteCount: Int64(review.expandedBytes), countStyle: .file))
+                    HStack { Text("文件数量"); Spacer(); Text("\(review.fileCount) 项").foregroundStyle(.secondary) }
+                    HStack { Text("解压后大小"); Spacer(); Text(ByteCountFormatter.string(fromByteCount: Int64(review.expandedBytes), countStyle: .file)).foregroundStyle(.secondary) }
                 }
                 Section {
                     ForEach(review.schemes, id: \.id) { scheme in
