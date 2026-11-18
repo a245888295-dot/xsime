@@ -26,7 +26,7 @@ struct HomeView: View {
     /// isaac2026 is listed only while the slide-chord plugin is on.
     private var chordPluginOn: Bool { (try? MobileOfficialPlugins.makeStore().isEnabled(legacyID: "chord")) == true }
     var body: some View {
-        NavigationStack {
+        NavigationView {
             List {
                 Section {
                     HStack(spacing: 16) {
@@ -161,7 +161,7 @@ struct ProviderEditor: View {
     @State private var message = ""
     @State private var probing = false
     var body: some View {
-        NavigationStack {
+        NavigationView {
             Form {
                 Section {
                     TextField(L("名称", "Name"),text:$provider.name)
@@ -255,7 +255,7 @@ struct PoemPatternEditor: View {
     @State var pattern: PoemPattern
     @State private var message = ""
     var body: some View {
-        NavigationStack {
+        NavigationView {
             Form {
                 TextField(L("名称，如“七绝”", "Name, e.g. “Quatrain”"), text: $pattern.name)
                 TextField(L("格式要求", "Form description"), text: $pattern.instruction, axis: .vertical).lineLimit(3...6)
@@ -283,7 +283,7 @@ struct PoemCardEditor: View {
     @State private var words = ""
     @State private var message = ""
     var body: some View {
-        NavigationStack {
+        NavigationView {
             Form {
                 TextField(L("名称，如“春日”", "Name, e.g. “Spring”"), text: $card.name)
                 Section { TextField(L("词语，用空格或逗号分隔", "Words, separated by spaces or commas"), text: $words, axis: .vertical).lineLimit(3...8) } footer: { Text(L("例如：杏花 细雨 燕归 东风", "For example: blossom drizzle swallow breeze")) }
@@ -339,7 +339,7 @@ struct ChordEditor: View {
     @State private var exporting = false
     @State private var document = JSONDocument(Data())
     var body: some View {
-        NavigationStack {
+        NavigationView {
             Form {
                 TextField(L("名称", "Name"),text:$profile.name)
                 TextField(L("左区字母", "Left keys"),text:$profile.leftKeys).textInputAutocapitalization(.never).autocorrectionDisabled()
@@ -394,7 +394,7 @@ private struct StoreUpdateView: View {
     var body: some View {
         Form {
             Section {
-                LabeledContent(L("当前版本", "Current version"), value: current)
+                HStack { Text(L("当前版本", "Current version")); Spacer(); Text(current).foregroundStyle(.secondary) }
                 if !message.isEmpty { Text(message).foregroundStyle(.secondary).accessibilityIdentifier("update.status") }
                 if checking { ProgressView() }
                 Button(L("检查更新", "Check for updates")) { Task { await check() } }.disabled(checking)
