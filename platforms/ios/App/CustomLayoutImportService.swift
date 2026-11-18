@@ -212,7 +212,8 @@ enum CustomLayoutImportService {
                 let widthNode = node["width"]
                 if widthNode?["landscape"] != nil {
                     orientation = true
-                    landscapeSum += widthNode?["landscape"]?["percentage"]?.float ?? 0
+                    let landscapeWidth = widthNode?["landscape"]?["percentage"]?.float ?? 0
+                    landscapeSum += landscapeWidth
                 }
                 let width = try percentage(widthNode?["portrait"] ?? widthNode)
                 let action = node["action"]
@@ -237,7 +238,8 @@ enum CustomLayoutImportService {
                 pending.append(.init(key: key, percentage: width))
             }
             if landscapeSum > 1.0001 { warnings.append("「\(name)」第 \(rowIndex + 1) 行横屏宽度超过 100%，未导入该横屏配置。") }
-            let fixed = pending.compactMap(\.percentage).reduce(0, +)
+            let percentages = pending.compactMap(\.percentage)
+            let fixed = percentages.reduce(0, +)
             let flexible = pending.filter { $0.percentage == nil }.count
             guard fixed <= 1.0001, flexible == 0 || fixed < 1 else {
                 throw invalid("第 \(rowIndex + 1) 行宽度超过可用空间。")
@@ -270,7 +272,10 @@ enum CustomLayoutImportService {
         }
         var metrics = CustomKeyboardMetrics(stagger: margins > 0)
         if let insets = keyboard["buttonInsets"] {
-            let horizontal = insets.float.map { $0 * 2 } ?? ((insets["left"]?.float ?? 0) + (insets["right"]?.float ?? 0))
+            let doubledInsets = insets.float.map { $0 * 2 }
+            let leftInset = insets["left"]?.float ?? 0
+            let rightInset = insets["right"]?.float ?? 0
+            let horizontal = doubledInsets ?? (leftInset + rightInset)
             guard horizontal.isFinite, (0...12).contains(horizontal) else { throw invalid("键间距超出 0–12 pt。") }
             metrics.gap = horizontal
             warnings.append("「\(name)」的左右内边距已近似转换成键间距；键高、外边距及纵向间距使用 \(ProductBrand.name) 编辑器规则。")
