@@ -1,6 +1,33 @@
 import SwiftUI
 import RimesCore
 
+/// iOS 16 才有 `TextField(axis: .vertical)`（多行输入）；iOS 15 退回 TextEditor + 占位文本。
+struct AdaptiveTextField: View {
+    let placeholder: String
+    @Binding var text: String
+    var minLines: Int = 3
+    var maxLines: Int = 8
+
+    var body: some View {
+        if #available(iOS 16.0, *) {
+            TextField(placeholder, text: $text, axis: .vertical)
+                .lineLimit(minLines...maxLines)
+        } else {
+            ZStack(alignment: .topLeading) {
+                if text.isEmpty {
+                    Text(placeholder)
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 8)
+                        .padding(.leading, 5)
+                        .allowsHitTesting(false)
+                }
+                TextEditor(text: $text)
+                    .frame(minHeight: CGFloat(minLines) * 24)
+            }
+        }
+    }
+}
+
 /// The AI assistant: the user's own presets, a small gallery of starters to copy, and the
 /// quick entrance bar the keyboard shows. Presets are made and edited here only.
 struct AssistantView: View {
@@ -61,7 +88,7 @@ struct AssistantView: View {
     }
 
     private func section<Content: View>(_ title: String, @ViewBuilder _ content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 10) { Text(title).font(.title3.bold()); content() }
+        VStack(alignment: .leading, spacing: 10) { Text(title).font(.title3).fontWeight(.bold); content() }
     }
     private var newCard: some View {
         VStack(spacing: 8) {
@@ -150,7 +177,7 @@ struct AssistantPresetEditor: View {
                     }
                 }
                 Section {
-                    TextField(L("告诉 AI 要怎么做", "Tell the AI what to do"), text: $preset.instruction, axis: .vertical).lineLimit(5...12)
+                    AdaptiveTextField(placeholder: L("告诉 AI 要怎么做", "Tell the AI what to do"), text: $preset.instruction, minLines: 5, maxLines: 12)
                         .accessibilityIdentifier("assistant.instruction")
                 } header: { Text(L("指令", "Instruction")) } footer: {
                     Text(L("键盘输入行里写的内容会作为用户消息发给 AI。可以说明对象、语气、长度和语言。", "What is written in the keyboard's input line is sent as the user message. You can set audience, tone, length and language."))
