@@ -25,8 +25,8 @@ private struct TranslationLanguageSetup: View {
                 Button(L("交换方向", "Swap languages")) { swap(&source, &target) }.disabled(preparing)
                 Button(preparing ? L("准备中…", "Preparing…") : L("准备／下载语言包", "Prepare / download languages")) {
                     preparing = true; status = ""
-                    if #available(iOS 26.4, *) { configuration = .init(source: .init(identifier: source), target: .init(identifier: target), preferredStrategy: .lowLatency) }
-                    else { configuration = .init(source: .init(identifier: source), target: .init(identifier: target)) }
+                    // preferredStrategy 是 iOS 26.4 才有的参数，当前 SDK 不可用；用默认策略即可。
+                    configuration = .init(source: .init(identifier: source), target: .init(identifier: target))
                     configuration?.invalidate()
                 }.disabled(preparing || source == target)
                 if !status.isEmpty { Text(status).accessibilityIdentifier("translation.preparationStatus") }
