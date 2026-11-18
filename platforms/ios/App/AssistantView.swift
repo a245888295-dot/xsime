@@ -136,7 +136,7 @@ struct AssistantPresetEditor: View {
     private static let symbols = ["sparkles", "moon.stars", "heart.text.square", "heart", "scissors", "face.smiling", "text.bubble", "pencil.and.outline",
                                   "briefcase", "graduationcap", "globe", "lightbulb", "megaphone", "gift", "leaf", "flame"]
     var body: some View {
-        NavigationStack {
+        NavigationView {
             Form {
                 TextField(L("名称，如“哄睡”", "Name, e.g. “Lullaby”"), text: $preset.name).accessibilityIdentifier("assistant.name")
                 Section(L("图标", "Icon")) {
