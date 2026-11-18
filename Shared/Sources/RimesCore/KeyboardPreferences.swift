@@ -56,13 +56,15 @@ public struct KeyboardPreferences: Codable {
     public var appliedSkinRevision: UUID?
     /// Thinking depth asked of AI plugins.
     public var thinking: AIThinking = .minimal
+    /// 0 关闭，1 左手，2 右手。键盘整体缩到一侧，方便单手打字。
+    public var oneHandedMode = 0
     public init() {}
     private enum CodingKeys: String, CodingKey {
         case scheme, appliedAppSelection, initialized, haptics, keySounds, traditional, sourceLanguage, targetLanguage
         case chordLayout, hapticStrength, lastChineseScheme, englishInput, poem, speakTranslation, statusSkin, art, statusSkinRotation, appliedSkinRevision, thinking
         case ordinaryLayout, longPressSwipeSymbols, appliedLongPressSwipeSymbolsRevision, keyboardSkin, appliedKeyboardAppearanceRevision, overriddenCustomLayoutRevision
         case directSwipeSymbols, portraitHeight, landscapeHeight, numericNineGrid, appliedLayoutOptionsRevision, keyStyle, appliedKeyStyleRevision
-        case appliedKeyboardThemeRevision, keyboardThemeMigrationVersion
+        case appliedKeyboardThemeRevision, keyboardThemeMigrationVersion, oneHandedMode
     }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -101,6 +103,7 @@ public struct KeyboardPreferences: Codable {
         statusSkinRotation = (try? values.decode([String].self, forKey: .statusSkinRotation)) ?? []
         appliedSkinRevision = try? values.decode(UUID.self, forKey: .appliedSkinRevision)
         thinking = (try? values.decode(AIThinking.self, forKey: .thinking)) ?? .minimal
+        oneHandedMode = min(2, max(0, (try? values.decode(Int.self, forKey: .oneHandedMode)) ?? 0))
     }
     public mutating func reconcile(scheme appScheme: InputScheme, revision: UUID?) {
         if !initialized || (revision != nil && revision != appliedAppSelection) {
