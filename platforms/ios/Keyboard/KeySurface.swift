@@ -93,7 +93,7 @@ final class KeySurface: UIView {
         }
         installUtility(backButton) { [weak self] in self?.emojiMode = false }
         updateLanguageButton()
-        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (surface: KeySurface, _: UITraitCollection) in surface.setNeedsDisplay() }
+        if #available(iOS 17.0, *) { registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (surface: KeySurface, _: UITraitCollection) in surface.setNeedsDisplay() } }
     }
     required init?(coder: NSCoder) { fatalError() }
     private func installUtility(_ button: UtilityKeycapButton, action: @escaping () -> Void) {
