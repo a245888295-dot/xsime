@@ -43,6 +43,32 @@ jobs:
       - name: Prepare official plugins
         run: python3 scripts/prepare-official-plugins.py
 
+      # 官方插件源码是从 submodule 导入生成的，不在本仓库里，只能在生成后打补丁：
+      # 1) LanguageAvailability/TranslationSession 的 preferredStrategy 属于 iOS 26.4，
+      #    当前 Xcode 26.3 的 SDK 还没有，删掉参数退回默认策略；
+      # 2) Locale.Language 是 iOS 16 类型，改用 iOS 15 也有的 Locale.languageCode。
+      - name: Patch generated plugin sources for iOS 15
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('platforms/ios/Support/BufferPlugins.swift')
+          if not p.is_file():
+              print('skip: BufferPlugins.swift not generated')
+              raise SystemExit(0)
+          s = p.read_text(encoding='utf-8')
+          before = s
+          s = s.replace('LanguageAvailability(preferredStrategy: .lowLatency)', 'LanguageAvailability()')
+          s = s.replace(', preferredStrategy: .lowLatency)', ')')
+          s = s.replace('Locale.Language(identifier: tag).languageCode?.identifier ?? tag',
+                        'Locale(identifier: tag).languageCode ?? tag')
+          if s != before:
+              p.write_text(s, encoding='utf-8')
+          print('patched' if s != before else 'no change needed')
+          print('remaining Locale.Language:', s.count('Locale.Language'))
+          print('remaining preferredStrategy:', s.count('preferredStrategy'))
+          PY
+
       - name: Bootstrap build inputs
         run: python3 platforms/ios/scripts/bootstrap.py
 
